@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.oriongo_multiplatform"
+    namespace = "com.oriongo.platform"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,11 +20,9 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.oriongo_multiplatform"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        applicationId = "com.oriongo.platform"
+        // Bluetooth serial clásico y los plugins de ubicación necesitan API 24+.
+        minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

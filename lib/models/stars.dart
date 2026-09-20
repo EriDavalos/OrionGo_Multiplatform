@@ -1,3 +1,7 @@
+// Los nombres del dominio astronómico (RA, DEC, ALT, AZ, LST, GST...) se
+// conservan en mayúsculas para que coincidan con la app móvil y la bibliografía.
+// ignore_for_file: non_constant_identifier_names
+
 import 'dart:math';
 
 class Star {
