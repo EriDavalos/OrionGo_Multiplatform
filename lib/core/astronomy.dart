@@ -19,20 +19,20 @@ class Astro {
 
   /// 12.582 -> 12h 34m 55.20s
   static String decimalToHms(double decimalHours) {
-    final g = GradeComponents.decimalToGrades(decimalHours);
+    final g = GradeComponents.DecimalToGrades(decimalHours);
     final sign = decimalHours < 0 ? '-' : '';
-    return '$sign${g.grades.abs().toInt().toString().padLeft(2, '0')}h '
-        '${g.minutes.toInt().toString().padLeft(2, '0')}m '
-        '${g.seconds.toStringAsFixed(2).padLeft(5, '0')}s';
+    return '$sign${g.Grades.abs().toInt().toString().padLeft(2, '0')}h '
+        '${g.Minutes.toInt().toString().padLeft(2, '0')}m '
+        '${g.Seconds.toStringAsFixed(2).padLeft(5, '0')}s';
   }
 
   /// -41.68 -> -41° 40' 48.00"
   static String decimalToDms(double decimalDegrees) {
-    final g = GradeComponents.decimalToGrades(decimalDegrees);
+    final g = GradeComponents.DecimalToGrades(decimalDegrees);
     final sign = decimalDegrees < 0 ? '-' : '';
-    return '$sign${g.grades.abs().toInt().toString().padLeft(3, '0')}° '
-        '${g.minutes.toInt().toString().padLeft(2, '0')}\' '
-        '${g.seconds.toStringAsFixed(2).padLeft(5, '0')}"';
+    return '$sign${g.Grades.abs().toInt().toString().padLeft(3, '0')}° '
+        '${g.Minutes.toInt().toString().padLeft(2, '0')}\' '
+        '${g.Seconds.toStringAsFixed(2).padLeft(5, '0')}"';
   }
 
   /// Segundos del día -> 13:45:02
@@ -81,10 +81,43 @@ class Astro {
     );
   }
 
+  /// Conversión AR/DEC -> (azimut, altitud) de los rectángulos y la retícula
+  /// de declinación: la versión con latitud y DEC negados de la app móvil
+  /// (`equatorialToHorizontal` en home.page.ts). No usa hora sideral: vive en
+  /// el marco LST = 0, el mismo del centro de la cámara.
+  static ({double az, double alt}) equatorialToHorizontal(
+    double raDeg,
+    double decDeg,
+    double latitudeDeg,
+  ) {
+    final latDeg = -latitudeDeg;
+
+    final ra = raDeg * toRad;
+    final dec = (-decDeg) * toRad;
+    final lat = latDeg * toRad;
+
+    // Coordenadas ecuatoriales a cartesianas
+    final x = math.cos(dec) * math.cos(ra);
+    final y = math.cos(dec) * math.sin(ra);
+    final z = math.sin(dec);
+
+    // Rotación por la latitud del observador (a coordenadas horizontales)
+    final xHor = x * math.sin(lat) - z * math.cos(lat);
+    final yHor = y;
+    final zHor = x * math.cos(lat) + z * math.sin(lat);
+
+    // Coordenadas horizontales
+    var azDeg = math.atan2(yHor, xHor) * toDeg;
+    if (azDeg < 0) azDeg += 360;
+
+    final alt = math.asin(zHor.clamp(-1.0, 1.0)) * toDeg;
+    return (az: azDeg, alt: alt);
+  }
+
   /// Conversión AR/DEC -> (azimut, altitud) usando la hora sideral local en
   /// grados. Es la que usa el cielo de la app móvil
   /// (`equatorialToHorizontalLST`).
-  static ({double az, double alt}) equatorialToHorizontalLst(
+  static ({double az, double alt}) equatorialToHorizontalLST(
     double raDeg,
     double decDeg,
     double lstDeg,

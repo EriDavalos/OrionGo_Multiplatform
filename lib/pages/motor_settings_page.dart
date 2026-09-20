@@ -92,7 +92,7 @@ class MotorSettingsPage extends StatelessWidget {
                               ? 'Detener seguimiento'
                               : 'Iniciar seguimiento',
                         ),
-                        onPressed: state.toggleTracking,
+                        onPressed: state.following,
                       ),
                     ),
                     const SizedBox(width: 10),

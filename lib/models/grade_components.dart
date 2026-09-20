@@ -1,13 +1,16 @@
-class GradeComponents {
-  double grades;
-  double minutes;
-  double seconds;
+// Los nombres se conservan idénticos a models/grade-components.ts de la app
+// móvil (Grades, Minutes, Seconds, GradesToDecimal, DecimalToGrades).
+// ignore_for_file: non_constant_identifier_names
 
-  GradeComponents(this.grades, this.minutes, this.seconds);
+class GradeComponents {
+  double Grades;
+  double Minutes;
+  double Seconds;
+
+  GradeComponents(this.Grades, this.Minutes, this.Seconds);
 
   /// Convierte grados/minutos/segundos a formato decimal
-  static double gradesToDecimal(
-      double grades, double minutes, double seconds) {
+  static double GradesToDecimal(double grades, double minutes, double seconds) {
     final sign = grades < 0 ? -1 : 1;
     grades = grades.abs();
     final decimal =
@@ -16,7 +19,7 @@ class GradeComponents {
   }
 
   /// Convierte formato decimal a grados/minutos/segundos
-  static GradeComponents decimalToGrades(double decimalN) {
+  static GradeComponents DecimalToGrades(double decimalN) {
     final sign = decimalN < 0 ? -1 : 1;
     decimalN *= sign;
 

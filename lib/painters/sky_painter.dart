@@ -1,3 +1,6 @@
+// Parámetros como RA, DEC, LST siguen el nombre de drawRectangleAt/draw3DStar.
+// ignore_for_file: non_constant_identifier_names
+
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -9,7 +12,8 @@ import '../models/mount_device.dart';
 import '../models/stars.dart';
 import 'projection3d.dart';
 
-/// Datos que necesita el cielo para dibujarse.
+/// Datos que necesita el cielo para dibujarse. Equivale al estado que la app
+/// móvil lee directamente del MainService dentro de draw3DScene().
 class SkyScene {
   const SkyScene({
     required this.stars,
@@ -20,9 +24,11 @@ class SkyScene {
     required this.radiusAdjust,
     required this.showAzimuthalGrid,
     required this.showEquatorialGrid,
-    required this.showBelowHorizon,
-    required this.equatorialToHorizontal,
-    required this.selectedStar,
+    required this.isViewAll,
+    required this.lstHours,
+    required this.latitude,
+    required this.touchedAZ,
+    required this.touchedALT,
     required this.mountRA,
     required this.mountDec,
     required this.mountColor,
@@ -42,16 +48,20 @@ class SkyScene {
   final double radiusAdjust;
   final bool showAzimuthalGrid;
   final bool showEquatorialGrid;
-  final bool showBelowHorizon;
 
-  /// Conversión AR (grados) / DEC (grados) -> azimut / altitud, usando la hora
-  /// sideral local del observador.
-  final ({double az, double alt}) Function(double raDeg, double decDeg)
-      equatorialToHorizontal;
+  /// Equivale a `isViewAll`: mostrar también bajo el horizonte.
+  final bool isViewAll;
 
-  final Star selectedStar;
+  /// Hora sideral local en horas (`getLocalSiderealTime`).
+  final double lstHours;
+  final double latitude;
 
-  /// Posición de la montura expresada en coordenadas ecuatoriales.
+  /// Punto del cielo señalado (toque en pantalla u objeto seleccionado);
+  /// lo usa draw3DPointer, igual que en la app móvil.
+  final double touchedAZ;
+  final double touchedALT;
+
+  /// Posición de la montura en el marco LST = 0.
   final double mountRA;
   final double mountDec;
   final Color mountColor;
@@ -64,8 +74,15 @@ class SkyScene {
   final List<RemoteUser> users;
 }
 
-/// Dibuja la esfera celeste completa: equivalente a `draw3DScene()` de la app
-/// móvil, con la misma cámara y proyección.
+/// Dibuja la esfera celeste completa: portado de `draw3DScene()` de la app
+/// móvil, con los mismos nombres de funciones y las mismas conversiones:
+///
+/// - Estrellas: `equatorialToHorizontalLST(RA, DEC, LST*15)` + espejo
+///   `az = 360 - az` (aquí es donde se ve girar el cielo con la Tierra).
+/// - Retícula de AR: `equatorialToHorizontalLST(ra, dec, -LST*15)` sin espejo.
+/// - Rectángulos y retícula de DEC: `equatorialToHorizontal` con latitud y
+///   DEC negados, sin hora sideral (marco LST = 0): por eso el rectángulo
+///   propio queda anclado al centro de la vista.
 class SkyPainter extends CustomPainter {
   SkyPainter(this.scene);
 
@@ -75,52 +92,100 @@ class SkyPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final centerX = size.width / 2;
     final centerY = size.height / 2;
+    final scale = math.min(centerX, centerY) * scene.zoom;
 
     final camera = SkyProjection(
       rotationAz: scene.rotationAz,
       rotationAlt: scene.rotationAlt,
       rotationRoll: scene.rotationRoll,
-      scale: math.min(centerX, centerY) * scene.zoom,
+      scale: scale,
       center: Offset(centerX, centerY),
     );
 
     canvas.drawRect(Offset.zero & size, Paint()..color = AppColors.bg);
 
+    /* Líneas azimutales */
     if (scene.showAzimuthalGrid) {
-      _drawAzimuthalLines(canvas, camera);
-      _drawAltitudeCircles(canvas, camera);
-    }
-    if (scene.showEquatorialGrid) {
-      _drawRightAscensionLines(canvas, camera);
-      _drawDeclinationCircles(canvas, camera);
-    }
-    if (!scene.showBelowHorizon) {
-      _drawGround(canvas, camera);
+      draw3DAzimuthalLines(canvas, camera, 15);
+      draw3DAltitudeCircles(canvas, camera, 10);
     }
 
-    _drawHorizon(canvas, camera);
+    /* Líneas ecuatoriales */
+    if (scene.showEquatorialGrid) {
+      draw3DRightAscensionLines(canvas, camera, 15);
+      draw3DDeclinationCircles(canvas, camera, 10);
+    }
+
+    /* Debajo del horizonte */
+    if (!scene.isViewAll) {
+      draw3DUnderHorizonBackground(canvas, camera);
+    }
+
+    draw3DHorizonCircle(canvas, camera);
+
     _drawStars(canvas, camera, size);
-    _drawCardinalPoints(canvas, camera);
-    _drawSelectedStar(canvas, camera);
-    _drawMount(canvas, camera);
-    _drawObservers(canvas, camera);
+
+    // Coordenadas cardinales
+    draw3DAZCP(canvas, camera, 0, 0, AppColors.danger, 'N');
+    draw3DAZCP(canvas, camera, 90, 0, AppColors.danger, 'E');
+    draw3DAZCP(canvas, camera, 180, 0, AppColors.danger, 'S');
+    draw3DAZCP(canvas, camera, 270, 0, AppColors.danger, 'O');
+
+    // Estrella seleccionada / punto señalado
+    draw3DPointer(
+      canvas,
+      camera,
+      scene.touchedAZ,
+      scene.touchedALT,
+      Colors.white,
+    );
+
+    // Montura, observador y usuarios remotos (drawRectangleAt, como en móvil)
+    drawRectangleAt(
+      canvas,
+      camera,
+      scene.mountRA,
+      scene.mountDec,
+      scene.mountColor,
+      scene.mountLabel,
+    );
+
+    drawRectangleAt(
+      canvas,
+      camera,
+      scene.ownRA,
+      scene.ownDEC,
+      scene.ownColor,
+      scene.ownLabel,
+    );
+
+    for (final user in scene.users) {
+      drawRectangleAt(
+        canvas,
+        camera,
+        user.posRA,
+        user.posDEC,
+        _parseColor(user.color),
+        '-- ${user.username}${user.admin ? ' (Admin)' : ''} --',
+      );
+    }
   }
 
-  // ------------------------------------------------------------------ retícula
-  void _drawAzimuthalLines(Canvas canvas, SkyProjection camera) {
+  // ------------------------------------------------------------ retícula 3D
+  void draw3DAzimuthalLines(Canvas canvas, SkyProjection camera, int step) {
     final paint = Paint()
       ..color = AppColors.gridAzimuthal
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
 
-    final maxHorizon = scene.showBelowHorizon ? -90.0 : 0.0;
+    final maxHorizon = scene.isViewAll ? -90.0 : 0.0;
 
-    for (double az = 0; az < 360; az += 15) {
+    for (double az = 0; az < 360; az += step) {
       final path = Path();
       var started = false;
 
       for (double alt = 90; alt >= maxHorizon; alt -= 3) {
-        final point = camera.project(az, alt);
+        final point = camera.project3DPoint(az, alt);
         if (point == null) {
           started = false;
           continue;
@@ -136,20 +201,20 @@ class SkyPainter extends CustomPainter {
     }
   }
 
-  void _drawAltitudeCircles(Canvas canvas, SkyProjection camera) {
+  void draw3DAltitudeCircles(Canvas canvas, SkyProjection camera, int step) {
     final paint = Paint()
       ..color = const Color(0x66007BCE)
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
 
-    final maxHorizon = scene.showBelowHorizon ? -90.0 : 0.0;
+    final maxHorizon = scene.isViewAll ? -90.0 : 0.0;
 
-    for (double alt = maxHorizon; alt < 90; alt += 10) {
+    for (double alt = maxHorizon; alt < 90; alt += step) {
       final path = Path();
       var started = false;
 
       for (double az = 0; az <= 360; az += 5) {
-        final point = camera.project(az, alt);
+        final point = camera.project3DPoint(az, alt);
         if (point == null) {
           started = false;
           continue;
@@ -165,41 +230,39 @@ class SkyPainter extends CustomPainter {
     }
   }
 
-  void _drawRightAscensionLines(Canvas canvas, SkyProjection camera) {
+  void draw3DHorizonCircle(Canvas canvas, SkyProjection camera) {
     final paint = Paint()
-      ..color = AppColors.gridEquatorial
-      ..strokeWidth = 1
+      ..color = Colors.white
+      ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
 
-    final maxHorizon = scene.showBelowHorizon ? -90.0 : -5.0;
+    final path = Path();
+    var started = false;
 
-    for (double ra = 0; ra < 360; ra += 15) {
-      final path = Path();
-      var started = false;
-
-      for (double dec = -90; dec <= 90; dec += 3) {
-        final altaz = scene.equatorialToHorizontal(ra, dec);
-        final point = camera.project(altaz.az, altaz.alt);
-
-        if (point == null || altaz.alt < maxHorizon) {
-          started = false;
-          continue;
-        }
-        if (started) {
-          path.lineTo(point.dx, point.dy);
-        } else {
-          path.moveTo(point.dx, point.dy);
-          started = true;
-        }
+    for (double az = 0; az <= 360; az += 5) {
+      final point = camera.project3DPoint(az, 0);
+      if (point == null) {
+        started = false;
+        continue;
       }
-      canvas.drawPath(path, paint);
+      if (started) {
+        path.lineTo(point.dx, point.dy);
+      } else {
+        path.moveTo(point.dx, point.dy);
+        started = true;
+      }
     }
+    canvas.drawPath(path, paint);
   }
 
-  void _drawDeclinationCircles(Canvas canvas, SkyProjection camera) {
-    final maxHorizon = scene.showBelowHorizon ? -90.0 : -5.0;
+  void draw3DDeclinationCircles(
+    Canvas canvas,
+    SkyProjection camera, [
+    int step = 10,
+  ]) {
+    final maxHorizon = scene.isViewAll ? -90.0 : -5.0;
 
-    for (double dec = -90; dec <= 90; dec += 10) {
+    for (double dec = -90; dec <= 90; dec += step) {
       final paint = Paint()
         ..color = dec == 0 ? const Color(0x59FD6500) : const Color(0x33FD6500)
         ..strokeWidth = 1
@@ -209,8 +272,8 @@ class SkyPainter extends CustomPainter {
       var started = false;
 
       for (double ra = 0; ra <= 360; ra += 5) {
-        final altaz = scene.equatorialToHorizontal(ra, dec);
-        final point = camera.project(altaz.az, altaz.alt);
+        final altaz = Astro.equatorialToHorizontal(ra, dec, scene.latitude);
+        final point = camera.project3DPoint(altaz.az, altaz.alt);
 
         if (point == null || altaz.alt < maxHorizon) {
           started = false;
@@ -227,17 +290,63 @@ class SkyPainter extends CustomPainter {
     }
   }
 
-  void _drawGround(Canvas canvas, SkyProjection camera) {
+  void draw3DRightAscensionLines(
+    Canvas canvas,
+    SkyProjection camera, [
+    int step = 15,
+  ]) {
+    final paint = Paint()
+      ..color = AppColors.gridEquatorial
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+
+    final maxHorizon = scene.isViewAll ? -90.0 : -5.0;
+
+    // La app móvil usa LST * -15 aquí: equivale al espejo 360 - az de las
+    // estrellas, sin aplicar el volteo explícito.
+    for (double ra = 0; ra < 360; ra += step) {
+      final path = Path();
+      var started = false;
+
+      for (double dec = -90; dec <= 90; dec += 3) {
+        final altaz = Astro.equatorialToHorizontalLST(
+          ra,
+          dec,
+          -scene.lstHours * 15,
+          scene.latitude,
+        );
+        final point = camera.project3DPoint(altaz.az, altaz.alt);
+
+        if (point == null || altaz.alt < maxHorizon) {
+          started = false;
+          continue;
+        }
+        if (started) {
+          path.lineTo(point.dx, point.dy);
+        } else {
+          path.moveTo(point.dx, point.dy);
+          started = true;
+        }
+      }
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  void draw3DUnderHorizonBackground(
+    Canvas canvas,
+    SkyProjection camera, [
+    int step = 10,
+  ]) {
     final paint = Paint()..color = AppColors.ground;
 
-    for (double alt = 0; alt > -90; alt -= 10) {
-      final altNext = alt - 10;
+    for (double alt = 0; alt > -90; alt -= step) {
+      final altNext = alt - step;
 
-      for (double az = 0; az <= 360; az += 10) {
-        final p1 = camera.project(az, alt);
-        final p2 = camera.project(az, altNext);
-        final p3 = camera.project(az + 10, altNext);
-        final p4 = camera.project(az + 10, alt);
+      for (double az = 0; az <= 360; az += step) {
+        final p1 = camera.project3DPoint(az, alt);
+        final p2 = camera.project3DPoint(az, altNext);
+        final p3 = camera.project3DPoint(az + step, altNext);
+        final p4 = camera.project3DPoint(az + step, alt);
 
         if (p1 == null || p2 == null || p3 == null || p4 == null) continue;
 
@@ -254,42 +363,24 @@ class SkyPainter extends CustomPainter {
     }
   }
 
-  void _drawHorizon(Canvas canvas, SkyProjection camera) {
-    final paint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-
-    final path = Path();
-    var started = false;
-
-    for (double az = 0; az <= 360; az += 5) {
-      final point = camera.project(az, 0);
-      if (point == null) {
-        started = false;
-        continue;
-      }
-      if (started) {
-        path.lineTo(point.dx, point.dy);
-      } else {
-        path.moveTo(point.dx, point.dy);
-        started = true;
-      }
-    }
-    canvas.drawPath(path, paint);
-  }
-
-  // -------------------------------------------------------------------- cielo
+  // ------------------------------------------------------------------ cielo
   void _drawStars(Canvas canvas, SkyProjection camera, Size size) {
     final white = Paint()..color = AppColors.starDefault;
     final cyan = Paint()..color = AppColors.starCyan;
     final violet = Paint()..color = AppColors.starViolet;
 
     for (final star in scene.stars) {
-      final altaz = scene.equatorialToHorizontal(star.RA * 15, star.DEC);
-      if (!scene.showBelowHorizon && altaz.alt < 0) continue;
+      final altaz = Astro.equatorialToHorizontalLST(
+        star.RA * 15,
+        star.DEC,
+        scene.lstHours * 15,
+        scene.latitude,
+      );
+      final alt = altaz.alt;
+      if (!scene.isViewAll && alt < 0) continue;
 
-      final point = camera.project(altaz.az, altaz.alt);
+      final az = 360 - altaz.az;
+      final point = camera.project3DPoint(az, alt);
       if (point == null) continue;
       if (point.dx < 0 ||
           point.dx > size.width ||
@@ -298,112 +389,146 @@ class SkyPainter extends CustomPainter {
         continue;
       }
 
-      final radius = _magnitudeRadius(star.mag) + scene.radiusAdjust;
       final paint = switch (star.type) {
         1 => white,
         3 => cyan,
         _ => violet,
       };
 
-      canvas.drawCircle(point, math.max(0.4, radius), paint);
+      draw3DStar(
+        canvas,
+        camera,
+        star.RA * 15,
+        star.DEC,
+        scene.lstHours,
+        paint.color,
+        '',
+        mag: magToRadius(star.mag) + scene.radiusAdjust,
+      );
     }
   }
 
-  double _magnitudeRadius(double magnitude) {
-    const minMag = -1.5;
-    const maxMag = 6.0;
-    const minR = 2.0;
-    const maxR = 0.5;
+  /// Portado de draw3DStar(): proyección con LST + espejo de azimut.
+  void draw3DStar(
+    Canvas canvas,
+    SkyProjection camera,
+    double RA,
+    double DEC,
+    double LST,
+    Color color,
+    String label, {
+    double lx = -10,
+    double ly = -10,
+    double mag = 1,
+  }) {
+    final altaz = Astro.equatorialToHorizontalLST(
+      RA,
+      DEC,
+      LST * 15,
+      scene.latitude,
+    );
 
-    final clamped = magnitude.clamp(minMag, maxMag);
-    final t = (clamped - minMag) / (maxMag - minMag);
-    return minR + (maxR - minR) * t;
-  }
+    final az = 360 - altaz.az;
+    final alt = altaz.alt;
 
-  void _drawCardinalPoints(Canvas canvas, SkyProjection camera) {
-    const cardinals = <(double, String)>[
-      (0, 'N'),
-      (90, 'E'),
-      (180, 'S'),
-      (270, 'O'),
-    ];
+    final p = camera.project3DPoint(az, alt);
+    if (p == null) return;
 
-    for (final (az, label) in cardinals) {
-      final point = camera.project(az, 0);
-      if (point == null) continue;
+    canvas.drawCircle(p, math.max(0.4, mag), Paint()..color = color);
+
+    if (label.isNotEmpty) {
       _label(
         canvas,
         label,
-        point + const Offset(-6, -24),
-        color: const Color(0xFFEF4444),
-        fontSize: 16,
-        bold: true,
+        p + Offset(lx, ly),
+        color: Colors.white,
+        fontSize: 14,
       );
     }
   }
 
-  void _drawSelectedStar(Canvas canvas, SkyProjection camera) {
-    final star = scene.selectedStar;
-    if (star.name.isEmpty) return;
+  /// Portado de magToRadius(): brillo -> radio en píxeles.
+  double magToRadius(double mag) {
+    const minMag = -1.5;
+    const maxMag = 6.0;
+    const minR = 1.0;
+    const maxR = 0.25;
 
-    final altaz = scene.equatorialToHorizontal(star.RA * 15, star.DEC);
-    final point = camera.project(altaz.az, altaz.alt);
-    if (point == null) return;
+    final clampedMag = mag.clamp(minMag, maxMag);
+    final t = (clampedMag - minMag) / (maxMag - minMag);
+    return minR + (maxR - minR) * t;
+  }
+
+  /// Portado de draw3DAZCP(): punto cardinal con espejo `az = 360 - AZ`.
+  void draw3DAZCP(
+    Canvas canvas,
+    SkyProjection camera,
+    double AZ,
+    double ALT,
+    Color color,
+    String label, {
+    double lx = -10,
+    double ly = -20,
+  }) {
+    final az = 360 - AZ;
+    final p = camera.project3DPoint(az, ALT);
+    if (p == null) return;
+
+    canvas.drawCircle(p, 3, Paint()..color = color);
+    _label(
+      canvas,
+      label,
+      p + Offset(lx, ly),
+      color: color,
+      fontSize: 16,
+      bold: true,
+    );
+  }
+
+  /// Portado de draw3DPointer(): cruz de localización sobre el punto
+  /// señalado (toque en pantalla u objeto seleccionado).
+  void draw3DPointer(
+    Canvas canvas,
+    SkyProjection camera,
+    double az,
+    double alt,
+    Color color, {
+    double mag = 35,
+  }) {
+    final p = camera.project3DPoint(az, alt);
+    if (p == null) return;
+
+    final distS = 35 * 0.3;
+    final distF = 35 * 0.8;
 
     final paint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 1.5;
+      ..color = color
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
 
     canvas.drawLine(
-        point - const Offset(16, 0), point + const Offset(16, 0), paint);
+      Offset(p.dx - mag - distS, p.dy),
+      Offset(p.dx - distF, p.dy),
+      paint,
+    );
     canvas.drawLine(
-        point - const Offset(0, 16), point + const Offset(0, 16), paint);
-    canvas.drawCircle(
-      point,
-      9,
-      Paint()
-        ..color = Colors.white
-        ..strokeWidth = 1.2
-        ..style = PaintingStyle.stroke,
+      Offset(p.dx + distF, p.dy),
+      Offset(p.dx + mag + distS, p.dy),
+      paint,
     );
-
-    _label(canvas, star.name, point + const Offset(20, -10),
-        color: Colors.white, fontSize: 13, bold: true);
-  }
-
-  void _drawMount(Canvas canvas, SkyProjection camera) {
-    _drawRectangleAt(
-      canvas,
-      camera,
-      scene.mountRA,
-      scene.mountDec,
-      scene.mountColor,
-      scene.mountLabel,
+    canvas.drawLine(
+      Offset(p.dx, p.dy - mag - distS),
+      Offset(p.dx, p.dy - distF),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(p.dx, p.dy + distF),
+      Offset(p.dx, p.dy + mag + distS),
+      paint,
     );
   }
 
-  void _drawObservers(Canvas canvas, SkyProjection camera) {
-    _drawRectangleAt(
-      canvas,
-      camera,
-      scene.ownRA,
-      scene.ownDEC,
-      scene.ownColor,
-      scene.ownLabel,
-    );
-
-    for (final user in scene.users) {
-      _drawRectangleAt(
-        canvas,
-        camera,
-        user.posRA,
-        user.posDEC,
-        _parseColor(user.color),
-        '-- ${user.username}${user.admin ? ' (Admin)' : ''} --',
-      );
-    }
-  }
-
+  // ----------------------------------------------------- rectángulos (marco)
   static Color _parseColor(String hex) {
     var value = hex.replaceAll('#', '').trim();
     if (value.length == 6) value = 'FF$value';
@@ -415,12 +540,16 @@ class SkyPainter extends CustomPainter {
   /// Rectángulo del campo visual: portado de `drawRectangleAt()` de la app
   /// móvil.
   ///
-  /// Igual que allá, el marcador rota para seguir la línea de rotación del
-  /// cielo: se proyecta el punto principal y un segundo punto desplazado
-  /// 0.1° en DEC, y el rectángulo se orienta con el ángulo entre ambos. Su
-  /// tamaño crece con el zoom siguiendo el modelo del sensor (4160x6240 con
-  /// focal 400).
-  void _drawRectangleAt(
+  /// Usa la conversión con latitud y DEC negados y SIN hora sideral (marco
+  /// LST = 0), igual que allá: el marcador del observador (touchedRA/touchedDEC
+  /// sincronizado con la cámara) se mantiene en el centro de la pantalla,
+  /// relativo a donde se mira.
+  ///
+  /// El marcador rota para seguir la línea de rotación del cielo: se proyecta
+  /// el punto principal y un segundo punto desplazado 0.1° en DEC, y el
+  /// rectángulo se orienta con el ángulo entre ambos. Su tamaño crece con el
+  /// zoom según el modelo del sensor (4160x6240 con focal 400).
+  void drawRectangleAt(
     Canvas canvas,
     SkyProjection camera,
     double ra,
@@ -429,13 +558,13 @@ class SkyPainter extends CustomPainter {
     String label,
   ) {
     // Proyección del punto principal.
-    final altaz = scene.equatorialToHorizontal(ra, dec);
-    final p = camera.project(altaz.az, altaz.alt);
+    final altaz = Astro.equatorialToHorizontal(ra, dec, scene.latitude);
+    final p = camera.project3DPoint(altaz.az, altaz.alt);
     if (p == null) return;
 
     // Proyección de un punto muy cercano (para calcular la orientación).
-    final altaz2 = scene.equatorialToHorizontal(ra, dec + 0.1);
-    final p2 = camera.project(altaz2.az, altaz2.alt);
+    final altaz2 = Astro.equatorialToHorizontal(ra, dec + 0.1, scene.latitude);
+    final p2 = camera.project3DPoint(altaz2.az, altaz2.alt);
     if (p2 == null) return;
 
     final angle = math.atan2(p2.dy - p.dy, p2.dx - p.dx);
@@ -459,7 +588,7 @@ class SkyPainter extends CustomPainter {
 
     final paint = Paint()
       ..color = color
-      ..strokeWidth = 2
+      ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
 
     canvas.save();
@@ -478,8 +607,8 @@ class SkyPainter extends CustomPainter {
     );
 
     // Cruz en el centro.
-    canvas.drawLine(const Offset(-8, 0), const Offset(8, 0), paint);
-    canvas.drawLine(const Offset(0, -8), const Offset(0, 8), paint);
+    canvas.drawLine(const Offset(-5, 0), const Offset(5, 0), paint);
+    canvas.drawLine(const Offset(0, -5), const Offset(0, 5), paint);
 
     // Texto rotado ~-89.36° como en la app móvil (Math.atan(-90)).
     canvas.rotate(math.atan(-90.0));
@@ -506,6 +635,7 @@ class SkyPainter extends CustomPainter {
     canvas.restore();
   }
 
+  // ----------------------------------------------------------------- ayuda
   void _label(
     Canvas canvas,
     String text,

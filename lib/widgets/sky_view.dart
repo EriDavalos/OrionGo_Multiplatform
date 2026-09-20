@@ -63,7 +63,7 @@ class _SkyViewState extends State<SkyView>
     if (!mounted) return;
     final state = context.read<AppState>();
 
-    state.tickTime();
+    state.updateTime();
 
     if (state.magMax != _loadedMagnitude) {
       _reloadStars();
@@ -76,7 +76,7 @@ class _SkyViewState extends State<SkyView>
 
       final elapsed = now.difference(_framesSince).inMilliseconds;
       if (elapsed > 0) {
-        state.setFps((_frames * 1000 / elapsed).round());
+        state.measureFPS((_frames * 1000 / elapsed).round());
       }
       _frames = 0;
       _framesSince = now;
@@ -90,7 +90,7 @@ class _SkyViewState extends State<SkyView>
     final target = context.read<AppState>().magMax;
     _loadedMagnitude = target;
 
-    final stars = await StarCatalog.upToMagnitude(target);
+    final stars = await StarCatalog.loadSkyMap(target);
     if (!mounted) return;
     setState(() => _stars = stars);
   }
@@ -159,9 +159,11 @@ class _SkyViewState extends State<SkyView>
       radiusAdjust: state.rAdjust,
       showAzimuthalGrid: state.isAzimuthalGrid,
       showEquatorialGrid: state.isEquatorialGrid,
-      showBelowHorizon: state.showBelowHorizon,
-      equatorialToHorizontal: state.equatorialToHorizontal,
-      selectedStar: state.starSelected,
+      isViewAll: state.isViewAll,
+      lstHours: state.localSiderealHours,
+      latitude: state.latitude,
+      touchedAZ: state.touchedAZ,
+      touchedALT: state.touchedALT,
       mountRA: state.angleC2,
       mountDec: 90 + state.angleC1,
       mountColor: mountConnected ? const Color(0xFF7CFC00) : AppColors.danger,

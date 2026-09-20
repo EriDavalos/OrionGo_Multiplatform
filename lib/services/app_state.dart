@@ -1,3 +1,6 @@
+// RAP y DECP son los nombres de MainService.goto() en la app móvil.
+// ignore_for_file: non_constant_identifier_names
+
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -86,9 +89,17 @@ class AppState extends ChangeNotifier {
   );
   double touchedRA = 0;
   double touchedDEC = 90;
+
+  /// Punto señalado en pantalla (portado de touchedAZ/touchedALT de la app
+  /// móvil): lo usa draw3DPointer. Se fija al tocar el cielo o al seleccionar
+  /// un objeto en el buscador.
+  double touchedAZ = 0;
+  double touchedALT = 0;
   bool isAzimuthalGrid = true;
   bool isEquatorialGrid = true;
-  bool showBelowHorizon = false;
+
+  /// Equivale a `isViewAll`: mostrar también bajo el horizonte.
+  bool isViewAll = false;
   double magMax = 6.0;
   double zoom3D = 4;
   double zoomFactor = 4;
@@ -139,6 +150,13 @@ class AppState extends ChangeNotifier {
   bool get hasLink => _link != null && _link!.isSupported;
 
   Future<void> init() async {
+    await initPreferences();
+    verifyDefault();
+    ready = true;
+    notifyListeners();
+  }
+
+  Future<void> initPreferences() async {
     await _settings.initDefaults();
 
     userId = await _settings.get<String>('userId');
@@ -165,26 +183,26 @@ class AppState extends ChangeNotifier {
     _link = link;
     link?.incoming.listen((line) {
       sendLogDevice('RX: $line');
-      handleDeviceLine(line);
+      processCommand(line);
     });
   }
 
-  /// Procesa una línea del protocolo ORIONV1 (equivale a processCommand()).
-  void handleDeviceLine(String raw) {
+  /// Procesa una línea del protocolo ORIONV1 (portado de processCommand()).
+  void processCommand(String raw) {
     final command = raw.trim();
     if (command.isEmpty) return;
 
     if (command.startsWith('SNDD:')) {
-      applyMotorInfo(command.substring(5));
+      getDataInformation(command.substring(5));
     } else if (command.startsWith('SPD:')) {
-      applyDriverPosition(command.substring(4));
+      getPositionDriver(command.substring(4));
     } else if (command.startsWith('OK:')) {
       Dialogs.message(
         '¡Emparejado correctamente!',
         'El dispositivo ${deviceConnected?.name ?? ''} ha sido emparejado correctamente.',
       );
-      Future<void>.delayed(const Duration(seconds: 1), () => sendToDevice('ADC:'));
-      sendToDevice('GETD:');
+      Future<void>.delayed(const Duration(seconds: 1), () => sendMessage('ADC:'));
+      sendMessage('GETD:');
     } else if (command.startsWith('ADCG:')) {
       _handleDeviceCard(command.substring(5));
     }
@@ -224,8 +242,8 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// SNDD: información de los drivers.
-  void applyMotorInfo(String json) {
+  /// SNDD: información de los drivers (portado de getDataInformation()).
+  void getDataInformation(String json) {
     try {
       final data = jsonDecode(json) as Map<String, dynamic>;
       sendLogDevice('La información se ha actualizado: $json');
@@ -261,8 +279,8 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// SPD: posición instantánea de los drivers.
-  void applyDriverPosition(String json) {
+  /// SPD: posición instantánea de los drivers (portado de getPositionDriver()).
+  void getPositionDriver(String json) {
     try {
       final data = jsonDecode(json) as Map<String, dynamic>;
       position1 = _d(data['position1'], fallback: position1);
@@ -316,7 +334,7 @@ class AppState extends ChangeNotifier {
     if (defaults.isEmpty) {
       idDeviceC = 'NoDevice';
       if (isAdmin && remote.connected) {
-        remote.disconnect();
+        remote.disconnectWebSocket();
       }
       notifyListeners();
       return;
@@ -368,8 +386,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Conecta con una montura (Bluetooth en Android, puerto serie en PC).
-  Future<void> connectDevice(MountDevice device) async {
+  /// Conecta con una montura (portado de BluetoothService.connect()).
+  Future<void> connect(MountDevice device) async {
     final link = _link;
     if (link == null || !link.isSupported) {
       await Dialogs.error('Esta plataforma no admite conexión directa.');
@@ -380,14 +398,14 @@ class AppState extends ChangeNotifier {
     Dialogs.toast('Conectando con ${device.name}...');
 
     try {
-      await link.requestPermissions();
+      await link.sendPermission();
       await link.connect(device);
 
       deviceConnected = device;
       setStatusDevice(device.address, MountStatus.connected);
       notifyListeners();
 
-      await sendToDevice('ORIONV1:');
+      await sendMessage('ORIONV1:');
       Dialogs.toast('Conectado con ${device.name}');
     } catch (error) {
       setStatusDevice(device.address, MountStatus.noConnected);
@@ -397,7 +415,8 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> disconnectDevice() async {
+  /// Portado de BluetoothService.disconnect().
+  Future<void> disconnect() async {
     final device = deviceConnected;
     if (device == null) return;
 
@@ -415,18 +434,21 @@ class AppState extends ChangeNotifier {
   }
 
   // ------------------------------------------------------------------ envío
-  Future<void> sendToDevice(String message) async {
+  /// Portado de BluetoothService.sendMessage(): envía `message` terminado en
+  /// salto de línea.
+  Future<void> sendMessage(String message) async {
     final link = _link;
     if (link == null || !link.isConnected) {
       sendLogDevice('TX (sin conexión): $message');
       return;
     }
     sendLogDevice('TX: $message');
-    await link.send(message);
+    await link.sendMessage(message);
   }
 
   // ------------------------------------------------------------------ tiempo
-  void tickTime() {
+  /// Portado de updateTime(): avanza el reloj de la app.
+  void updateTime() {
     final now = DateTime.now();
     if (!isHourEditing) {
       if (isOnline) return;
@@ -453,7 +475,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void resetTimeToNow() {
+  /// Portado de setNowDate(): vuelve la hora al tiempo real.
+  void setNowDate() {
     isCustomTime = false;
     isHourEditing = false;
     _customBaseTime = null;
@@ -467,7 +490,7 @@ class AppState extends ChangeNotifier {
     return dtNow.difference(start).inSeconds;
   }
 
-  void setSecondsOfDay(int seconds) {
+  void updateRHourDay(int seconds) {
     final start = DateTime(dtNow.year, dtNow.month, dtNow.day);
     setCustomTime(start.add(Duration(seconds: seconds.clamp(0, 86399))));
   }
@@ -497,7 +520,10 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  void setFps(int value) {
+  void setFps(int value) => measureFPS(value);
+
+  /// Portado de measureFPS(): fps medidos desde el bucle de dibujo.
+  void measureFPS(int value) {
     if (fps == value) return;
     fps = value;
     notifyListeners();
@@ -514,39 +540,38 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Hora sideral local en grados (para AR/DEC <-> azimut/altitud).
-  double get localSiderealDegrees =>
-      starSelected.getLocalSiderealTime(longitude, dtNow) * 15;
+  /// Hora sideral local en horas (igual que getLocalSiderealTime() en móvil).
+  double get localSiderealHours =>
+      starSelected.getLocalSiderealTime(longitude, dtNow);
 
-  ({double az, double alt}) equatorialToHorizontal(double raDeg, double decDeg) =>
-      Astro.equatorialToHorizontalLst(
-        raDeg,
-        decDeg,
-        localSiderealDegrees,
-        latitude,
-      );
+  /// Hora sideral local en grados.
+  double get localSiderealDegrees => localSiderealHours * 15;
+
+  /// Igual que `horizontalToEquatorial()` de home.page.ts (usa la latitud del
+  /// observador internamente).
+  ({double ra, double dec}) horizontalToEquatorial(
+    double azDeg,
+    double altDeg,
+    double lstDeg,
+  ) =>
+      Astro.horizontalToEquatorial(azDeg, altDeg, lstDeg, latitude);
 
   /// Convierte el centro de la vista en coordenadas ecuatoriales.
   void syncTouchedFromCamera() {
-    final coord = Astro.horizontalToEquatorial(
-      rotationAz - 90,
-      -(rotationAlt - 270),
-      0,
-      latitude,
-    );
+    final coord = horizontalToEquatorial(rotationAz - 90, -(rotationAlt - 270), 0);
     touchedRA = coord.ra;
     touchedDEC = coord.dec;
   }
 
-  /// Coloca el marcador del observador al tocar el cielo.
+  /// Igual que onTouchEnd()/openSearch() de la app móvil: fija el punto
+  /// señalado (touchedAZ/touchedALT) que dibuja draw3DPointer.
   void setTouchedFromAzAlt(double az, double alt) {
-    final coord = Astro.horizontalToEquatorial(az, alt, 0, latitude);
-    touchedRA = coord.ra;
-    touchedDEC = coord.dec;
+    touchedAZ = az;
+    touchedALT = alt;
     notifyListeners();
   }
 
-  /// Arrastre: gira el cielo como en la app móvil.
+  /// Arrastre: gira el cielo como en la app móvil (onMouseMove/onTouchMove).
   void rotateBy(double dx, double dy, {double gain = 0.6}) {
     const minZoom = 4.0;
     final factor = SkyProjection.sensitivityFactor(rotationAlt);
@@ -572,12 +597,17 @@ class AppState extends ChangeNotifier {
     setZoom(zoom3D);
   }
 
-  void selectStar(Star star) {
-    star.precess(dtNow);
-    starSelected = star;
-    star.calculatePositionWithDate(latitude, longitude, dtNow);
+  /// Igual que `setStarSelected()` de MainService: fija la estrella
+  /// seleccionada (precesada a la fecha) y notifica a la interfaz.
+  void setStarSelected(Star value) {
+    value.precess(dtNow);
+    starSelected = value;
+    value.calculatePositionWithDate(latitude, longitude, dtNow);
     notifyListeners();
   }
+
+  /// Igual que `getStarSelected()` de MainService.
+  Star getStarSelected() => starSelected;
 
   void clearStar() {
     starSelected = Star.coordinates(0, 0, 0, 0, 0, 0, '', 0, 6);
@@ -597,21 +627,31 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setGrids({bool? azimuthal, bool? equatorial}) {
-    if (azimuthal != null) isAzimuthalGrid = azimuthal;
-    if (equatorial != null) isEquatorialGrid = equatorial;
+  /// Portado de toggleAzimuthalGrid().
+  void toggleAzimuthalGrid() {
+    isAzimuthalGrid = !isAzimuthalGrid;
     _settings.set('isAzimuthalGrid', isAzimuthalGrid);
+    notifyListeners();
+  }
+
+  /// Portado de toggleEquatorialGrid().
+  void toggleEquatorialGrid() {
+    isEquatorialGrid = !isEquatorialGrid;
     _settings.set('isEquatorialGrid', isEquatorialGrid);
     notifyListeners();
   }
 
-  void setMagnitudeLimit(double value) {
+  void setMagnitudeLimit(double value) => changueMag(value);
+
+  /// Portado de changueMag(): fija el límite de magnitud visible.
+  void changueMag(double value) {
     magMax = value;
     notifyListeners();
   }
 
-  void toggleBelowHorizon() {
-    showBelowHorizon = !showBelowHorizon;
+  /// Portado de toggleViewAll(): alterna la vista bajo el horizonte.
+  void toggleViewAll() {
+    isViewAll = !isViewAll;
     notifyListeners();
   }
 
@@ -630,9 +670,9 @@ class AppState extends ChangeNotifier {
 
   // ------------------------------------------------------------------ montura
   /// Puerto de MainService.goto(): mueve la montura al punto centrado.
-  Future<void> goTo({double? ra, double? dec, bool isUser = false}) async {
-    final raPoint = ra ?? touchedRA;
-    final decPoint = dec ?? touchedDEC;
+  Future<void> goto({double? RAP, double? DECP, bool isUser = false}) async {
+    final raPoint = RAP ?? touchedRA;
+    final decPoint = DECP ?? touchedDEC;
 
     final head = isUser
         ? '¿Desea aceptar esta petición?'
@@ -659,7 +699,6 @@ class AppState extends ChangeNotifier {
 
     final posDEC = decPoint > 180 ? decPoint - 450 : decPoint - 90;
     final posRA = raPoint > 180 ? raPoint - 360 : raPoint;
-
     final decSteps = (200 * microsteps1 * drv1r) * (posDEC / 360);
     final raSteps = (200 * microsteps2 * drv2r) * (posRA / 360);
 
@@ -693,7 +732,7 @@ class AppState extends ChangeNotifier {
     goToTime = T;
     goToTimeStr = T.toStringAsFixed(0).padLeft(2, '0');
 
-    await sendToDevice('GOTO:$posDEC,$posRA');
+    await sendMessage('GOTO:$posDEC,$posRA');
   }
 
   /// Posición de origen de la montura.
@@ -702,18 +741,18 @@ class AppState extends ChangeNotifier {
       '¿Desea ir a la posición inicial?',
       'El dispositivo se moverá al punto de partida donde empezó.',
     )) {
-      await sendToDevice('GOTO:0,0');
+      await sendMessage('GOTO:0,0');
     }
   }
 
-  /// Activa o desactiva el seguimiento sideral.
-  Future<void> toggleTracking() async {
+  /// Portado de following(): activa o desactiva el seguimiento sideral.
+  Future<void> following() async {
     final enable = !isTracking;
     if (await Dialogs.confirm(
       '¿Desea ${enable ? 'activar' : 'desactivar'} el modo seguimiento?',
       'El dispositivo se moverá a la velocidad de rotación de la tierra de forma constante.',
     )) {
-      await sendToDevice('FLLW:$enable');
+      await sendMessage('FLLW:$enable');
     }
     deviceDateCT = DateTime.now().millisecondsSinceEpoch;
   }

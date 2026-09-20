@@ -1,3 +1,6 @@
+// Los nombres de parámetros (AZ, ALT) siguen la app móvil.
+// ignore_for_file: non_constant_identifier_names
+
 import 'dart:math' as math;
 import 'dart:ui';
 
@@ -36,9 +39,10 @@ class SkyProjection {
 
   /// Proyecta (azimut, altitud) en grados al plano de la pantalla.
   /// Devuelve `null` si el punto queda detrás del observador.
-  Offset? project(double azimuth, double altitude) {
-    final az = _rad(azimuth);
-    final alt = _rad(altitude);
+  /// Portado de project3DPoint() de la app móvil.
+  Offset? project3DPoint(double AZ, double ALT) {
+    final az = _rad(AZ);
+    final alt = _rad(ALT);
 
     final point = vm.Vector3(
       math.cos(alt) * math.cos(az),
@@ -60,7 +64,8 @@ class SkyProjection {
     );
   }
 
-  /// Inversa de [project]: convierte un punto de pantalla en (az, alt).
+  /// Inversa de [project3DPoint]: convierte un punto de pantalla en (az, alt).
+  /// Portado de screenToSpherical() de la app móvil.
   ({double az, double alt})? screenToSpherical(Offset screen) {
     final dx = (screen.dx - center.dx) / scale;
     final dy = (center.dy - screen.dy) / scale;

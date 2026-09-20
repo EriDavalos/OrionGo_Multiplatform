@@ -38,7 +38,7 @@ class AndroidMountLink implements MountLink {
       .where((line) => line.isNotEmpty);
 
   @override
-  Future<void> requestPermissions() async {
+  Future<void> sendPermission() async {
     // El lado nativo pide los permisos de Android 12+ (BLUETOOTH_CONNECT y
     // BLUETOOTH_SCAN) o ACCESS_FINE_LOCATION en versiones previas.
     final granted = await _channel.invokeMethod<bool>('requestPermissions');
@@ -50,13 +50,13 @@ class AndroidMountLink implements MountLink {
   }
 
   @override
-  Future<List<MountDevice>> knownDevices() async {
+  Future<List<MountDevice>> listPairedDevices() async {
     final raw = await _channel.invokeMethod<List<dynamic>>('pairedDevices');
     return _map(raw);
   }
 
   @override
-  Future<List<MountDevice>> discoverDevices() async {
+  Future<List<MountDevice>> discoverUnpairedDevices() async {
     final raw = await _channel.invokeMethod<List<dynamic>>('discoverDevices');
     return _map(raw);
   }
@@ -88,7 +88,7 @@ class AndroidMountLink implements MountLink {
   }
 
   @override
-  Future<void> send(String command) async {
+  Future<void> sendMessage(String command) async {
     await _channel.invokeMethod<void>('send', {'data': command});
   }
 }

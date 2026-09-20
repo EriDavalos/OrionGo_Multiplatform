@@ -61,7 +61,7 @@ class _SearchModalBodyState extends State<SearchModalBody> {
   Future<void> _search(String value) async {
     if (!mounted) return;
     setState(() => _loading = true);
-    final results = await StarCatalog.search(value, _type);
+    final results = await StarCatalog.getStars(value, _type);
     if (!mounted) return;
     setState(() {
       _results = results.take(300).toList();
@@ -163,9 +163,9 @@ class _MountConnectionCardState extends State<_MountConnectionCard> {
     });
 
     try {
-      await link.requestPermissions();
-      final known = await link.knownDevices();
-      final discovered = await link.discoverDevices();
+      await link.sendPermission();
+      final known = await link.listPairedDevices();
+      final discovered = await link.discoverUnpairedDevices();
       if (!mounted) return;
 
       final merged = <String, MountDevice>{
@@ -281,7 +281,7 @@ class _MountConnectionCardState extends State<_MountConnectionCard> {
                       icon: const Icon(Icons.link_off_rounded, size: 18),
                       label: const Text('Desconectar montura'),
                       onPressed: () async {
-                        await context.read<AppState>().disconnectDevice();
+                        await context.read<AppState>().disconnect();
                         if (context.mounted) setState(() {});
                       },
                     ),
@@ -323,7 +323,7 @@ class _MountConnectionCardState extends State<_MountConnectionCard> {
                                 : () async {
                                     await context
                                         .read<AppState>()
-                                        .connectDevice(device);
+                                        .connect(device);
                                     if (context.mounted) setState(() {});
                                   },
                           );
@@ -422,8 +422,19 @@ class _ResultTile extends StatelessWidget {
         ),
         trailing: const Icon(Icons.check_circle_outline_rounded, size: 20),
         onTap: () {
-          state.selectStar(star);
-          state.setTouchedFromAzAlt(star.AZ, star.ALT);
+          state.setStarSelected(star);
+
+          // Igual que openSearch() de la app móvil: coloca el puntero sobre
+          // el objeto, con el mismo espejo 360 - az que usan las estrellas.
+          final lstDegrees = state.localSiderealHours * 15;
+          final altaz = Astro.equatorialToHorizontalLST(
+            star.RA * 15,
+            star.DEC,
+            lstDegrees,
+            state.latitude,
+          );
+          state.setTouchedFromAzAlt(360 - altaz.az, altaz.alt);
+
           Dialogs.toast('${star.name} seleccionado.');
           Navigator.of(context).maybePop();
         },

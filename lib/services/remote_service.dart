@@ -32,7 +32,7 @@ class RemoteService {
         '&admin=$isAdmin&userId=${state.userId}&name=$username';
   }
 
-  Future<void> connect(
+  Future<void> connectWebSocket(
     AppState state,
     String idDevice, {
     required String username,
@@ -43,7 +43,7 @@ class RemoteService {
     state.isAdmin = isAdmin;
     state.setUserColor();
 
-    await disconnect(silent: true);
+    await disconnectWebSocket(silent: true);
 
     final channel = WebSocketChannel.connect(
       Uri.parse(_link(idDevice, username, isAdmin, state)),
@@ -99,7 +99,7 @@ class RemoteService {
         state.isAdminConnected = admins.isNotEmpty;
 
         if (!state.isAdminConnected) {
-          disconnect(silent: true);
+          disconnectWebSocket(silent: true);
           Dialogs.message(
             'Has sido expulsado de la sala',
             'No hay ningún administrador dentro de la sala.',
@@ -109,7 +109,7 @@ class RemoteService {
           final me = '${state.username}${state.userId}';
           final admin = admins.first;
           if (me == '${admin.username}${admin.userId}') {
-            disconnect(silent: true);
+            disconnectWebSocket(silent: true);
             Dialogs.message('Te han expulsado de la sala',
                 'Ya existe un administrador.');
             notMode = 1;
@@ -164,9 +164,9 @@ class RemoteService {
         break;
 
       case 'goto':
-        state.goTo(
-          ra: _num(messages['RA']),
-          dec: _num(messages['DEC']),
+        state.goto(
+          RAP: _num(messages['RA']),
+          DECP: _num(messages['DEC']),
           isUser: true,
         );
         break;
@@ -256,7 +256,7 @@ class RemoteService {
     raws.add(jsonEncode(payload));
   }
 
-  Future<void> disconnect({bool silent = false}) async {
+  Future<void> disconnectWebSocket({bool silent = false}) async {
     stopUpdate();
     await _subscription?.cancel();
     _subscription = null;

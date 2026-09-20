@@ -6,18 +6,18 @@ import 'package:oriongo_multiplatform/models/stars.dart';
 void main() {
   group('GradeComponents', () {
     test('convierte grados/minutos/segundos a decimal y vuelve', () {
-      final decimal = GradeComponents.gradesToDecimal(41, 16, 7.5);
+      final decimal = GradeComponents.GradesToDecimal(41, 16, 7.5);
       expect(decimal, closeTo(41.26875, 0.0001));
 
-      final parts = GradeComponents.decimalToGrades(decimal);
-      expect(parts.grades, 41);
-      expect(parts.minutes, 16);
-      expect(parts.seconds, closeTo(7.5, 0.01));
+      final parts = GradeComponents.DecimalToGrades(decimal);
+      expect(parts.Grades, 41);
+      expect(parts.Minutes, 16);
+      expect(parts.Seconds, closeTo(7.5, 0.01));
     });
 
     test('conserva el signo de las declinaciones negativas', () {
-      expect(GradeComponents.gradesToDecimal(-41, 16, 0), lessThan(0));
-      expect(GradeComponents.decimalToGrades(-41.5).grades, -41);
+      expect(GradeComponents.GradesToDecimal(-41, 16, 0), lessThan(0));
+      expect(GradeComponents.DecimalToGrades(-41.5).Grades, -41);
     });
   });
 
@@ -47,7 +47,7 @@ void main() {
       // declinación es igual a la latitud del observador.
       // Todas las coordenadas se expresan en grados (AR en horas × 15).
       final latitude = 21.094412;
-      final result = Astro.equatorialToHorizontalLst(
+      final result = Astro.equatorialToHorizontalLST(
         12 * 15,
         latitude,
         12 * 15,

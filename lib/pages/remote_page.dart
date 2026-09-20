@@ -193,7 +193,7 @@ class _AdminTab extends StatelessWidget {
                       icon: const Icon(Icons.refresh_rounded),
                       label: const Text('Reconectar'),
                       onPressed: () {
-                        state.remote.connect(
+                        state.remote.connectWebSocket(
                           state,
                           state.idDeviceC,
                           username: state.username,
@@ -271,7 +271,7 @@ class _AdminTab extends StatelessWidget {
 
       state.isInitServer = true;
       state.refresh();
-      await state.remote.connect(
+      await state.remote.connectWebSocket(
         state,
         state.idDeviceC,
         username: state.username,
@@ -287,7 +287,7 @@ class _AdminTab extends StatelessWidget {
       state.isInitServer = false;
       state.isRemote = false;
       state.refresh();
-      await state.remote.disconnect();
+      await state.remote.disconnectWebSocket();
     }
   }
 }
@@ -375,7 +375,7 @@ class _UserTabState extends State<_UserTab> {
     setState(() => _connecting = true);
     try {
       if (idDevice != state.remote.firstId) {
-        await state.remote.connect(
+        await state.remote.connectWebSocket(
           state,
           idDevice,
           username: state.username,

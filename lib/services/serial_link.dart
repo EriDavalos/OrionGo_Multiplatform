@@ -43,15 +43,15 @@ class SerialMountLink implements MountLink {
   Stream<String> get incoming => _lines.stream;
 
   @override
-  Future<void> requestPermissions() async {
+  Future<void> sendPermission() async {
     // El sistema operativo gestiona el emparejamiento; no hay permisos extra.
   }
 
   @override
-  Future<List<MountDevice>> knownDevices() async => _ports();
+  Future<List<MountDevice>> listPairedDevices() async => _ports();
 
   @override
-  Future<List<MountDevice>> discoverDevices() async => _ports();
+  Future<List<MountDevice>> discoverUnpairedDevices() async => _ports();
 
   List<MountDevice> _ports() {
     return SerialPort.availablePorts.map((name) {
@@ -148,7 +148,7 @@ class SerialMountLink implements MountLink {
   }
 
   @override
-  Future<void> send(String command) async {
+  Future<void> sendMessage(String command) async {
     final port = _port;
     if (port == null || !port.isOpen) {
       throw Exception('El puerto serie no está abierto.');

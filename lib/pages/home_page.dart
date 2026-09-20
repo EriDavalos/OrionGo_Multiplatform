@@ -254,7 +254,7 @@ class _BottomControls extends StatelessWidget {
             _RoundButton(
               tooltip: state.isTracking ? 'Detener seguimiento' : 'Seguir',
               active: state.isTracking,
-              onTap: () => state.toggleTracking(),
+              onTap: () => state.following(),
               badge: state.isTracking ? state.trackingTimeStr : null,
               child: Icon(
                 state.isTracking
@@ -267,7 +267,7 @@ class _BottomControls extends StatelessWidget {
             _RoundButton(
               tooltip: 'Ir al objeto centrado',
               active: state.isGoTo,
-              onTap: () => state.goTo(),
+              onTap: () => state.goto(),
               badge: state.isGoTo ? state.goToTimeStr : null,
               child: Icon(
                 state.isGoTo ? Icons.close_rounded : Icons.gps_fixed_rounded,
@@ -456,7 +456,7 @@ class _TimePanelState extends State<_TimePanel> {
                     max: 86399,
                     value: state.secondsOfDay.toDouble().clamp(0, 86399),
                     onChanged: state.isHourEditing
-                        ? (value) => state.setSecondsOfDay(value.round())
+                        ? (value) => state.updateRHourDay(value.round())
                         : null,
                   ),
                 ),
@@ -488,7 +488,7 @@ class _TimePanelState extends State<_TimePanel> {
                   tooltip: 'Día siguiente',
                 ),
                 IconButton.filled(
-                  onPressed: state.resetTimeToNow,
+                  onPressed: state.setNowDate,
                   icon: const Icon(Icons.watch_later_rounded),
                   tooltip: 'Usar la hora actual',
                 ),
@@ -531,17 +531,17 @@ class _ViewPanelState extends State<_ViewPanel> {
                 FilterChip(
                   label: const Text('Acimutal'),
                   selected: state.isAzimuthalGrid,
-                  onSelected: (value) => state.setGrids(azimuthal: value),
+                  onSelected: (value) => state.toggleAzimuthalGrid(),
                 ),
                 FilterChip(
                   label: const Text('Ecuatorial'),
                   selected: state.isEquatorialGrid,
-                  onSelected: (value) => state.setGrids(equatorial: value),
+                  onSelected: (value) => state.toggleEquatorialGrid(),
                 ),
                 FilterChip(
                   label: const Text('Ver bajo el horizonte'),
-                  selected: state.showBelowHorizon,
-                  onSelected: (_) => state.toggleBelowHorizon(),
+                  selected: state.isViewAll,
+                  onSelected: (_) => state.toggleViewAll(),
                 ),
               ],
             ),
@@ -555,7 +555,7 @@ class _ViewPanelState extends State<_ViewPanel> {
               max: 7,
               divisions: 850,
               value: state.magMax.clamp(-1.5, 7),
-              onChanged: state.setMagnitudeLimit,
+              onChanged: state.changueMag,
             ),
             Text(
               'Zoom actual: ${state.zoom3D.toStringAsFixed(1)}x',
@@ -592,15 +592,15 @@ class _StarPanelState extends State<_StarPanel> {
   void initState() {
     super.initState();
     final star = widget.state.starSelected;
-    final ra = GradeComponents.decimalToGrades(star.RA);
-    final dec = GradeComponents.decimalToGrades(star.DEC);
+    final ra = GradeComponents.DecimalToGrades(star.RA);
+    final dec = GradeComponents.DecimalToGrades(star.DEC);
 
-    _rah = TextEditingController(text: ra.grades.toInt().toString());
-    _ram = TextEditingController(text: ra.minutes.toInt().toString());
-    _ras = TextEditingController(text: ra.seconds.toStringAsFixed(2));
-    _decg = TextEditingController(text: dec.grades.toInt().toString());
-    _decm = TextEditingController(text: dec.minutes.toInt().toString());
-    _decs = TextEditingController(text: dec.seconds.toStringAsFixed(2));
+    _rah = TextEditingController(text: ra.Grades.toInt().toString());
+    _ram = TextEditingController(text: ra.Minutes.toInt().toString());
+    _ras = TextEditingController(text: ra.Seconds.toStringAsFixed(2));
+    _decg = TextEditingController(text: dec.Grades.toInt().toString());
+    _decm = TextEditingController(text: dec.Minutes.toInt().toString());
+    _decs = TextEditingController(text: dec.Seconds.toStringAsFixed(2));
   }
 
   @override
@@ -645,9 +645,9 @@ class _StarPanelState extends State<_StarPanel> {
                     child: FilledButton.icon(
                       icon: const Icon(Icons.gps_fixed_rounded, size: 16),
                       label: const Text('Ir a'),
-                      onPressed: () => state.goTo(
-                        ra: state.starSelected.AZ,
-                        dec: state.starSelected.ALT,
+                      onPressed: () => state.goto(
+                        RAP: state.starSelected.AZ,
+                        DECP: state.starSelected.ALT,
                       ),
                     ),
                   ),
@@ -755,7 +755,7 @@ class _StarPanelState extends State<_StarPanel> {
                       const Expanded(child: Text('Seguir objeto')),
                       Switch(
                         value: state.isTracking,
-                        onChanged: (_) => state.toggleTracking(),
+                        onChanged: (_) => state.following(),
                       ),
                     ],
                   ),
@@ -773,12 +773,12 @@ class _StarPanelState extends State<_StarPanel> {
   }
 
   void _applyCoordinates(String _) {
-    final ra = GradeComponents.gradesToDecimal(
+    final ra = GradeComponents.GradesToDecimal(
       double.tryParse(_rah.text) ?? 0,
       double.tryParse(_ram.text) ?? 0,
       double.tryParse(_ras.text) ?? 0,
     );
-    final dec = GradeComponents.gradesToDecimal(
+    final dec = GradeComponents.GradesToDecimal(
       double.tryParse(_decg.text) ?? 0,
       double.tryParse(_decm.text) ?? 0,
       double.tryParse(_decs.text) ?? 0,
@@ -802,8 +802,17 @@ class _StarPanelState extends State<_StarPanel> {
       builder: (_) => const _SearchDialog(),
     );
     if (star == null) return;
-    state.selectStar(star);
-    state.setTouchedFromAzAlt(star.AZ, star.ALT);
+    state.setStarSelected(star);
+
+    // Igual que openSearch() de la app móvil: puntero sobre el objeto.
+    final lstDegrees = state.localSiderealHours * 15;
+    final altaz = Astro.equatorialToHorizontalLST(
+      star.RA * 15,
+      star.DEC,
+      lstDegrees,
+      state.latitude,
+    );
+    state.setTouchedFromAzAlt(360 - altaz.az, altaz.alt);
     setState(() => _searchResult = star);
   }
 }
@@ -849,7 +858,7 @@ class _SearchDialogState extends State<_SearchDialog> {
 
   Future<void> _search(String value) async {
     setState(() => _loading = true);
-    final results = await StarCatalog.search(value, _type);
+    final results = await StarCatalog.getStars(value, _type);
     if (!mounted) return;
     setState(() {
       _results = results.take(120).toList();

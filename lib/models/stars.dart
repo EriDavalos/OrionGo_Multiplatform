@@ -4,6 +4,8 @@
 
 import 'dart:math';
 
+import 'grade_components.dart';
+
 class Star {
   double RAJ2000;
   double DECJ2000;
@@ -40,14 +42,9 @@ class Star {
     int type,
     double mag,
   ) {
-    final RA = gradesToDecimal(RAHJ2000, RAMJ2000, RASJ2000);
-    final DEC = gradesToDecimal(DECGJ2000, DECMJ2000, DECSJ2000);
+    final RA = GradeComponents.GradesToDecimal(RAHJ2000, RAMJ2000, RASJ2000);
+    final DEC = GradeComponents.GradesToDecimal(DECGJ2000, DECMJ2000, DECSJ2000);
     return Star(RA, DEC, name: name, type: type, mag: mag);
-  }
-
-  static double gradesToDecimal(double g, double m, double s) {
-    final sign = g < 0 ? -1 : 1;
-    return sign * (g.abs() + m / 60.0 + s / 3600.0);
   }
 
   void calculatePositionWithDate(double lat, double lon, DateTime date) {

@@ -52,8 +52,8 @@ class _PairPageState extends State<PairPage> {
     });
 
     try {
-      await link.requestPermissions();
-      final known = await link.knownDevices();
+      await link.sendPermission();
+      final known = await link.listPairedDevices();
       if (!mounted) return;
       setState(() {
         _known = known;
@@ -61,7 +61,7 @@ class _PairPageState extends State<PairPage> {
       });
 
       setState(() => _loadingAvailable = true);
-      final available = await link.discoverDevices();
+      final available = await link.discoverUnpairedDevices();
       if (!mounted) return;
       setState(() {
         _available = available
@@ -146,7 +146,7 @@ class _PairPageState extends State<PairPage> {
                 ),
                 icon: const Icon(Icons.link_off_rounded),
                 label: const Text('Desemparejar'),
-                onPressed: () => state.disconnectDevice(),
+                onPressed: () => state.disconnect(),
               ),
             ),
           _DeviceSection(
@@ -178,7 +178,7 @@ class _PairPageState extends State<PairPage> {
   }
 
   Future<void> _connect(AppState state, MountDevice device) async {
-    await state.connectDevice(device);
+    await state.connect(device);
     if (!mounted) return;
     setState(() {});
   }

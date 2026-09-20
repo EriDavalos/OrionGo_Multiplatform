@@ -48,13 +48,13 @@ class StarCatalog {
       value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 
   /// Estrellas visibles para una magnitud límite (equivale a loadSkyMap()).
-  static Future<List<Star>> upToMagnitude(double magMax) async {
+  static Future<List<Star>> loadSkyMap(double magMax) async {
     final all = await load();
     return all.where((star) => star.mag <= magMax).toList();
   }
 
   /// Búsqueda por nombre y tipo (equivale a sqlite.getStars()).
-  static Future<List<Star>> search(String query, int type) async {
+  static Future<List<Star>> getStars(String query, int type) async {
     final all = await load();
     final q = query.trim().toLowerCase();
     return all.where((star) {
