@@ -25,6 +25,11 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+
+  // Canal de Bluetooth serial (SPP/RFCOMM) para la montura Orion.
+  mount_bluetooth_ = std::make_unique<MountBluetoothChannel>(
+      flutter_controller_->engine()->messenger(), GetHandle());
+
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -51,6 +56,12 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // Tareas diferidas del canal de Bluetooth (respuestas y líneas recibidas).
+  if (message == MountBluetoothChannel::kSignalMessage && mount_bluetooth_) {
+    mount_bluetooth_->DrainPending();
+    return 0;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

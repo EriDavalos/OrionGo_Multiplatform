@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "mount_bluetooth_channel.h"
 #include "win32_window.h"
 
 // A window that does nothing but host a Flutter view.
@@ -28,6 +29,9 @@ class FlutterWindow : public Win32Window {
 
   // The Flutter instance hosted by this window.
   std::unique_ptr<flutter::FlutterViewController> flutter_controller_;
+
+  // Canal de Bluetooth serial (SPP) para la conexión con la montura.
+  std::unique_ptr<MountBluetoothChannel> mount_bluetooth_;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

@@ -5,12 +5,14 @@ import 'package:flutter/services.dart';
 import '../models/mount_device.dart';
 import 'mount_link.dart';
 
-/// Bluetooth serial clásico (SPP/RFCOMM) en Android.
+/// Bluetooth serial clásico (SPP/RFCOMM).
 ///
 /// Se implementa con un MethodChannel propio para no depender de plugins
-/// abandonados: el lado nativo usa BluetoothSocket con el UUID SPP estándar.
-class AndroidMountLink implements MountLink {
-  AndroidMountLink();
+/// abandonados. El lado nativo usa BluetoothSocket con el UUID SPP estándar
+/// en Android (BluetoothSocket) y un socket RFCOMM de Winsock en Windows
+/// (`windows/runner/mount_bluetooth_channel.cpp`).
+class BluetoothSerialLink implements MountLink {
+  BluetoothSerialLink();
 
   static const MethodChannel _channel = MethodChannel('oriongo/mount_bt');
   static const EventChannel _rxChannel = EventChannel('oriongo/mount_bt/rx');
@@ -22,8 +24,8 @@ class AndroidMountLink implements MountLink {
 
   @override
   String get hint =>
-      'Empareja la montura desde los ajustes de Bluetooth de Android y '
-      'selecciónala aquí.';
+      'Empareja la montura desde el Bluetooth del sistema (ajustes de Android '
+      'o de Windows) y selecciónala aquí.';
 
   @override
   bool get isSupported => true;

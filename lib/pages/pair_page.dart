@@ -150,11 +150,11 @@ class _PairPageState extends State<PairPage> {
               ),
             ),
           _DeviceSection(
-            title: state.link?.platformLabel == 'Bluetooth'
-                ? 'Dispositivos emparejados'
+            title: state.link?.platformLabel.contains('Bluetooth') == true
+                ? 'Dispositivos y puertos emparejados'
                 : 'Puertos disponibles',
-            emptyText: state.link?.platformLabel == 'Bluetooth'
-                ? 'No se encontró ningún dispositivo emparejado.'
+            emptyText: state.link?.platformLabel.contains('Bluetooth') == true
+                ? 'No se encontró ningún dispositivo o puerto emparejado.'
                 : 'No se encontró ningún puerto serie.',
             devices: _known,
             loading: _loadingKnown,
@@ -163,8 +163,8 @@ class _PairPageState extends State<PairPage> {
           ),
           const SizedBox(height: 16),
           _DeviceSection(
-            title: state.link?.platformLabel == 'Bluetooth'
-                ? 'Dispositivos disponibles'
+            title: state.link?.platformLabel.contains('Bluetooth') == true
+                ? 'Búsqueda Bluetooth'
                 : 'Todos los puertos del sistema',
             emptyText: 'No se encontraron dispositivos nuevos.',
             devices: _available,

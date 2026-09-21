@@ -1,17 +1,23 @@
 import 'dart:io' show Platform;
 
-import 'android_bt_link.dart';
+import 'bluetooth_serial_link.dart';
+import 'desktop_mount_link.dart';
 import 'mount_link.dart';
 import 'serial_link.dart';
 
 /// Devuelve la conexión adecuada según la plataforma:
-/// Android -> Bluetooth serial; Windows/Linux/macOS -> puerto serie (incluye
-/// los dispositivos Bluetooth emparejados en el sistema operativo).
+/// Android -> Bluetooth serial nativo.
+/// Windows -> Bluetooth serial nativo (RFCOMM/SPP) + puertos serie, para
+/// cubrir tanto la montura Bluetooth como adaptadores USB-serial.
+/// Linux/macOS -> puerto serie (incluye /dev/rfcomm de Bluetooth emparejado).
 MountLink? createMountLink({int baudRate = 9600}) {
-  if (Platform.isAndroid || Platform.isIOS) {
-    return AndroidMountLink();
+  if (Platform.isAndroid) {
+    return BluetoothSerialLink();
   }
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+  if (Platform.isWindows) {
+    return DesktopMountLink(serialLink: SerialMountLink(baudRate: baudRate));
+  }
+  if (Platform.isLinux || Platform.isMacOS) {
     return SerialMountLink(baudRate: baudRate);
   }
   return null;

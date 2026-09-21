@@ -451,8 +451,8 @@ class SkyPainter extends CustomPainter {
   double magToRadius(double mag) {
     const minMag = -1.5;
     const maxMag = 6.0;
-    const minR = 1.0;
-    const maxR = 0.25;
+    const minR = 1.25;
+    const maxR = 0.40;
 
     final clampedMag = mag.clamp(minMag, maxMag);
     final t = (clampedMag - minMag) / (maxMag - minMag);
@@ -493,13 +493,13 @@ class SkyPainter extends CustomPainter {
     double az,
     double alt,
     Color color, {
-    double mag = 35,
+    double mag = 25,
   }) {
     final p = camera.project3DPoint(az, alt);
     if (p == null) return;
 
-    final distS = 35 * 0.3;
-    final distF = 35 * 0.8;
+    final distS = 35 * 0.01;
+    final distF = 35 * 0.4;
 
     final paint = Paint()
       ..color = color
